@@ -14,7 +14,7 @@ class usbshredder():
     def shred(self, block):
         self.show_lcd('clear')
         self.show_lcd("Shredding /dev/" + block)
-        p = subprocess.check_output(["dd", "if=/dev/urandom", "of=/dev/" + block, "bs=4M", "status=progress"])
+        p = subprocess.Popen(["dd", "if=/dev/urandom", "of=/dev/" + block, "bs=4M", "status=progress"])
     def show_lcd(self, lcdstr):
         if lcdstr == "clear":
             system('clear')
@@ -37,7 +37,6 @@ class usbshredder():
                 if device.action == 'remove':
                     self.show_lcd("\nUSB block " + device.sys_path[-3:] + " removed")
                     p2 = subprocess.Popen(["killall", "dd"])
-                    #p.terminate()
                     time.sleep(2)
                     self.show_lcd('clear')
                     self.show_lcd("READY")
