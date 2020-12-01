@@ -1,3 +1,5 @@
+# TO-DO - DISPLAY NOT COMMING BACK TO MAIN THREAD AFTER DONE
+#       - 
 import pyudev
 import threading
 import logging
@@ -76,6 +78,7 @@ class Lcd_class():
 
 class Usbshredder():
     def __init__(self):
+        self.show_lcd('USB DESTROYER', 'v0.0.0.0.0.0.1 ALPHA')
         self.show_lcd('clear')
         thread = threading.Thread(target=self._work)
         thread.daemon = False
@@ -94,6 +97,8 @@ class Usbshredder():
               if p.poll() is None: # Check if the p subprocess is running.
                 pressed = True     # Button watchdog
                 p.terminate()      # Terminate de p subprocess
+                self.show_lcd("Please", "Wait...")
+                os.system('killall dd')
                 self.show_lcd("Creating", "GPT Table")
                 os.system('parted /dev/'+ block +' mklabel gpt')
                 time.sleep(1)
@@ -104,6 +109,7 @@ class Usbshredder():
                 os.system('mkfs.vfat /dev/' + block + '1')
                 time.sleep(1)
                 self.show_lcd("DONE!", "Remove USB")
+                self._running = False
             except:
               print("")
 
@@ -144,6 +150,7 @@ class Usbshredder():
             asdf.lcd_string(status, asdf.LCD_LINE_2)  ## DESCOMENTAR PARA USAR CON LCD
 
     def _work(self):
+        global t0
         self.context = pyudev.Context()
         self.monitor = pyudev.Monitor.from_netlink(self.context)
         self.monitor.filter_by(subsystem='block')
@@ -155,7 +162,7 @@ class Usbshredder():
               
                 if device.action == 'add':
                     self.show_lcd('clear')
-                    self.show_lcd("USB Inserted", device.sys_path[-3:])
+                    self.show_lcd("USB Inserted")
                     time.sleep(1)
                     t0 = threading.Thread(name='t0', target=self.button, args=(device.sys_path[-3:],))
                     t0.start()
@@ -163,7 +170,7 @@ class Usbshredder():
 
                 if device.action == 'remove':
                     self.show_lcd('clear')
-                    self.show_lcd("USB Removed", device.sys_path[-3:])
+                    self.show_lcd("USB Removed")
                     
                     time.sleep(1)
                     self.show_lcd('clear')
