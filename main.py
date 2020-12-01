@@ -1,3 +1,5 @@
+# TO-DO - DISPLAY NOT COMMING BACK TO MAIN THREAD AFTER DONE
+#       - ADD AUTO FORMATTING OPTION AFTER DD IS DONE
 import pyudev
 import threading
 import logging
@@ -8,6 +10,7 @@ from subprocess import Popen, PIPE
 from os import system, name
 import smbus
 import time
+import RPi.GPIO as GPIO
 
 class Lcd_class():
   # Define some device parameters
@@ -20,8 +23,8 @@ class Lcd_class():
 
   LCD_LINE_1 = 0x80 # LCD RAM address for the 1st line
   LCD_LINE_2 = 0xC0 # LCD RAM address for the 2nd line
-  LCD_LINE_3 = 0x94 # LCD RAM address for the 3rd line
-  LCD_LINE_4 = 0xD4 # LCD RAM address for the 4th line
+  #LCD_LINE_3 = 0x94 # LCD RAM address for the 3rd line
+  #LCD_LINE_4 = 0xD4 # LCD RAM address for the 4th line
 
   #LCD_BACKLIGHT  = 0x08  # On
   LCD_BACKLIGHT = 0x00  # Off
@@ -31,7 +34,7 @@ class Lcd_class():
   # Timing constants
   E_PULSE = 0.0005
   E_DELAY = 0.0005
-  bus = smbus.SMBus(1)
+  bus = smbus.SMBus(1) ## DESCOMENTAR PARA USAR CON LCD
 
   def __init__(self):
     self.lcd_byte(0x33,Lcd_class.LCD_CMD) # 110011 Initialise
@@ -74,17 +77,47 @@ class Lcd_class():
 
 class Usbshredder():
     def __init__(self):
+        self.show_lcd('USB DESTROYER', 'v0.0.0.0.1 ALPHA')
+        time.sleep(3)
         self.show_lcd('clear')
         thread = threading.Thread(target=self._work)
         thread.daemon = False
         thread.start()
 
+    def button(self, block):
+        global pressed
+        pressed = False
+        GPIO.setwarnings(False) # Ignore warning for now
+        GPIO.setmode(GPIO.BOARD) # Use physical pin numbering
+        GPIO.setup(16, GPIO.IN, pull_up_down=GPIO.PUD_DOWN) # Set pin 10 to be an input pin and set initial value to be pulled low (off)
+        while True: # Run forever
+          time.sleep(0.2)
+          if GPIO.input(16) == GPIO.HIGH:
+            try:
+              if p.poll() is None: # Check if the p subprocess is running.
+                pressed = True     # Button watchdog
+                p.terminate()      # Terminate p subprocess
+                self.show_lcd("Creating", "GPT Table")
+                os.system('parted /dev/'+ block +' mklabel gpt')
+                time.sleep(1)
+                self.show_lcd("Creating", "Partition")
+                os.system('parted /dev/' + block + ' mkpart primary 2048s 100%')
+                time.sleep(1)
+                self.show_lcd("Formating", "vfat partition")
+                os.system('mkfs.vfat /dev/' + block + '1')
+                time.sleep(1)
+                self.show_lcd("DONE!", "Remove USB")
+                self._running = False
+            except:
+              print("")
+
     def shred(self, block):
         self.show_lcd('clear')
-        p = subprocess.Popen(["dd", "if=/dev/urandom", "of=/dev/" + block, "bs=4M", "status=progress"], stderr=subprocess.PIPE)
+        global p
+        p = subprocess.Popen(["dd", "if=/dev/zero", "of=/dev/" + block, "bs=4M", "status=progress"], stderr=subprocess.PIPE)
         #self.show_lcd(p[0])
         line = ''
-        while True:
+        while True: # This is horrible, but it deals with the sting of the subprocess
           out = p.stderr.read(1)
           if out == '' and p.poll() != None:
             break
@@ -92,46 +125,52 @@ class Usbshredder():
             s = out.decode("utf-8")
             if s == '\r':
               if len(line) > 0:
-                
                 sl = line.split(" ")
-                print(sl)
-                #print len(line), line
                 ls = sl[4] + sl[5]
-                self.show_lcd("Shredding USB...", ls[:-1] + "@" + sl[9] + sl[10])
+                
+                if p.poll() is None and not pressed: # Check if the p subprocess is running and the button haven't being pressed
+                  self.show_lcd("Shredding USB", ls[:-1] + "@" + sl[9] + sl[10])
+                
                 line = ''
+                time.sleep(1)
             else:
               line = line + s
-
+      
     def show_lcd(self, lcdstr, status = " "):
-        asdf = Lcd_class()
+        asdf = Lcd_class()  ## DESCOMENTAR PARA USAR CON LCD
         if lcdstr == "clear":
             system('clear')
-            asdf.lcd_clear()
+            asdf.lcd_clear()  ## DESCOMENTAR PARA USAR CON LCD
         else: 
             print(lcdstr)
             print(status)
-            asdf.lcd_string(lcdstr, asdf.LCD_LINE_1)
-            asdf.lcd_string(status, asdf.LCD_LINE_2)
+            asdf.lcd_string(lcdstr, asdf.LCD_LINE_1)  ## DESCOMENTAR PARA USAR CON LCD
+            asdf.lcd_string(status, asdf.LCD_LINE_2)  ## DESCOMENTAR PARA USAR CON LCD
 
     def _work(self):
+        global t0
         self.context = pyudev.Context()
         self.monitor = pyudev.Monitor.from_netlink(self.context)
         self.monitor.filter_by(subsystem='block')
-        self.show_lcd("READY")
+        self.show_lcd("Ready for duty", "Insert USB")
         self.monitor.start()
         for device in iter(self.monitor.poll, None):
+            
             if device.sys_path[-3:].isalpha():
+              
                 if device.action == 'add':
                     self.show_lcd('clear')
-                    self.show_lcd("Inserted:", device.sys_path[-3:])
+                    self.show_lcd("USB Inserted")
                     time.sleep(1)
+                    t0 = threading.Thread(name='t0', target=self.button, args=(device.sys_path[-3:],))
+                    t0.start()
                     self.shred(device.sys_path[-3:])          
 
                 if device.action == 'remove':
                     self.show_lcd('clear')
-                    self.show_lcd("Removed:", device.sys_path[-3:])
-                    subprocess.Popen(["killall", "dd"], stdout=PIPE)
+                    self.show_lcd("USB Removed")
+                    
                     time.sleep(1)
                     self.show_lcd('clear')
-                    self.show_lcd("READY")
+                    self.show_lcd("Ready for duty", "Insert USB")
 a = Usbshredder()
