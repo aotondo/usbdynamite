@@ -114,7 +114,7 @@ class Usbshredder():
     def shred(self, block):
         self.show_lcd('clear')
         global p
-        p = subprocess.Popen(["dd", "if=/dev/zero", "of=/dev/" + block, "bs=4M", "status=progress"], stderr=subprocess.PIPE)
+        p = subprocess.Popen(["dd", "if=/dev/urandom", "of=/dev/" + block, "bs=4M", "status=progress"], stderr=subprocess.PIPE)
         #self.show_lcd(p[0])
         line = ''
         while True: # This is horrible, but it deals with the sting of the subprocess
