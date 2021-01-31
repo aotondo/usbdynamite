@@ -5,89 +5,44 @@ import threading
 import logging
 import os
 import subprocess
-import time
 from subprocess import Popen, PIPE
 from os import system, name
 import smbus
 import time
 import RPi.GPIO as GPIO
+from datetime import datetime
+import board
+import digitalio
+import adafruit_character_lcd.character_lcd as characterlcd
 
 class Lcd_class():
-  # Define some device parameters
-  I2C_ADDR  = 0x27 # I2C device address
-  LCD_WIDTH = 16   # Maximum characters per line
-
-  # Define some device constants
-  LCD_CHR = 1 # Mode - Sending data
-  LCD_CMD = 0 # Mode - Sending command
-
-  LCD_LINE_1 = 0x80 # LCD RAM address for the 1st line
-  LCD_LINE_2 = 0xC0 # LCD RAM address for the 2nd line
-  #LCD_LINE_3 = 0x94 # LCD RAM address for the 3rd line
-  #LCD_LINE_4 = 0xD4 # LCD RAM address for the 4th line
-
-  LCD_BACKLIGHT  = 0x08  # On
-  #LCD_BACKLIGHT = 0x00  # Off
-
-  ENABLE = 0b00000100 # Enable bit
-
-  # Timing constants
-  E_PULSE = 0.0005
-  E_DELAY = 0.0005
-  bus = smbus.SMBus(1) ## DESCOMENTAR PARA USAR CON LCD
-
-  def lcd_init(self):
-    self.lcd_byte(0x33,self.LCD_CMD) # 110011 Initialise
-    self.lcd_byte(0x32,self.LCD_CMD) # 110010 Initialise
-    self.lcd_byte(0x06,self.LCD_CMD) # 000110 Cursor move direction
-    self.lcd_byte(0x0C,self.LCD_CMD) # 001100 Display On,Cursor Off, Blink Off 
-    self.lcd_byte(0x28,self.LCD_CMD) # 101000 Data length, number of lines, font size
-    self.lcd_byte(0x01,self.LCD_CMD) # 000001 Clear display
-    time.sleep(self.E_DELAY)
-
+  lcd_columns = 16
+  lcd_rows = 2
+  
+  # compatible with all versions of RPI as of Jan. 2019
+  # v1 - v3B+
+  lcd_rs = digitalio.DigitalInOut(board.D22)
+  lcd_en = digitalio.DigitalInOut(board.D17)
+  lcd_d4 = digitalio.DigitalInOut(board.D25)
+  lcd_d5 = digitalio.DigitalInOut(board.D24)
+  lcd_d6 = digitalio.DigitalInOut(board.D23)
+  lcd_d7 = digitalio.DigitalInOut(board.D18)
+  
+  
+  # Initialise the lcd class
+  global lcd
+  lcd = characterlcd.Character_LCD_Mono(lcd_rs, lcd_en, lcd_d4, lcd_d5, lcd_d6, lcd_d7, lcd_columns, lcd_rows)
   def lcd_clear(self):
-    self.lcd_byte(0x01,self.LCD_CMD)
+    lcd.clear()
   
-  def lcd_byte(self, bits, mode):
-    bits_high = mode | (bits & 0xF0) | 0x08
-    bits_low = mode | ((bits<<4) & 0xF0) | 0x08
-
-    # High bits
-    self.bus.write_byte(self.I2C_ADDR, bits_high)
-    self.lcd_toggle_enable(bits_high)
-
-    # Low bits
-    self.bus.write_byte(self.I2C_ADDR, bits_low)
-    self.lcd_toggle_enable(bits_low)
-    self.bus.write_byte(0x27, 0x08)
-
-  def lcd_toggle_enable(self, bits):
-    # Toggle enable
-    time.sleep(self.E_DELAY)
-    self.bus.write_byte(self.I2C_ADDR, (bits | self.ENABLE))
-    time.sleep(self.E_PULSE)
-    self.bus.write_byte(self.I2C_ADDR,(bits & self.ENABLE))
-    time.sleep(self.E_DELAY)
-
-  #def lcd_string(self, message,line):
-    # Send string to display
-  #  message = message.ljust(Lcd_class.LCD_WIDTH," ")
-  #  self.lcd_byte(line, Lcd_class.LCD_CMD)
-  #  for i in range(Lcd_class.LCD_WIDTH):
-  #    self.lcd_byte(ord(message[i]),Lcd_class.LCD_CHR)
-  
-  def lcd_string(self, message,line):
+  def lcd_string(self, message):
     # Send string to display
     message = message.ljust(16," ")
-    self.lcd_byte(line, self.LCD_CMD)
-    for i in range(16):
-      self.lcd_byte(ord(message[i]),self.LCD_CHR)
-      
-
+    lcd.message = message
 
 class Usbshredder():
     def __init__(self):
-        self.show_lcd('USB DESTROYER', 'v0.0.0.0.1 ALPHA')
+        self.show_lcd('USB DESTROYER\nv0.0.0.0.1 ALPHA')
         time.sleep(3)
         self.show_lcd('clear')
         thread = threading.Thread(target=self._work)
@@ -102,21 +57,21 @@ class Usbshredder():
         GPIO.setup(16, GPIO.IN, pull_up_down=GPIO.PUD_DOWN) # Set pin 10 to be an input pin and set initial value to be pulled low (off)
         while True: # Run forever
           time.sleep(0.2)
-          if GPIO.input(16) == GPIO.HIGH:
+          if GPIO.input(36) == GPIO.HIGH:
             try:
               if p.poll() is None: # Check if the p subprocess is running.
                 pressed = True     # Button watchdog
                 p.terminate()      # Terminate p subprocess
-                self.show_lcd("Creating", "GPT Table")
+                self.show_lcd("Creating\nGPT Table")
                 os.system('parted /dev/'+ block +' mklabel gpt')
                 time.sleep(1)
-                self.show_lcd("Creating", "Partition")
+                self.show_lcd("Creating\nPartition")
                 os.system('parted /dev/' + block + ' mkpart primary 2048s 100%')
                 time.sleep(1)
-                self.show_lcd("Formating", "vfat partition")
+                self.show_lcd("Formating\nvfat partition")
                 os.system('mkfs.vfat /dev/' + block + '1')
                 time.sleep(1)
-                self.show_lcd("DONE!", "Remove USB")
+                self.show_lcd("DONE!\nRemove USB")
                 self._running = False
             except:
               print("")
@@ -139,7 +94,7 @@ class Usbshredder():
                 ls = sl[4] + sl[5]
                 
                 if p.poll() is None and not pressed: # Check if the p subprocess is running and the button haven't being pressed
-                  self.show_lcd("Shredding USB", ls[:-1] + "@" + sl[9] + sl[10])
+                  self.show_lcd("Shredding USB\n" + ls[:-1] + "@" + sl[9] + sl[10])
                 
                 line = ''
                 time.sleep(1)
@@ -156,15 +111,14 @@ class Usbshredder():
       else: 
           print(lcdstr)
           print(status)
-          asdf.lcd_string(lcdstr, asdf.LCD_LINE_1)  ## DESCOMENTAR PARA USAR CON LCD
-          asdf.lcd_string(status, asdf.LCD_LINE_2)  ## DESCOMENTAR PARA USAR CON LCD
+          asdf.lcd_string(lcdstr)  ## DESCOMENTAR PARA USAR CON LCD
 
     def _work(self):
         global t0
         self.context = pyudev.Context()
         self.monitor = pyudev.Monitor.from_netlink(self.context)
         self.monitor.filter_by(subsystem='block')
-        self.show_lcd("Ready for duty", "Insert USB")
+        self.show_lcd("Ready for duty\n" + "Insert USB")
         self.monitor.start()
         for device in iter(self.monitor.poll, None):
             
@@ -184,5 +138,5 @@ class Usbshredder():
                     
                     time.sleep(1)
                     self.show_lcd('clear')
-                    self.show_lcd("Ready for duty", "Insert USB")
+                    self.show_lcd("Ready for duty\n" + "Insert USB")
 a = Usbshredder()
