@@ -18,9 +18,7 @@ import adafruit_character_lcd.character_lcd as characterlcd
 class Lcd_class():
   lcd_columns = 16
   lcd_rows = 2
-  
-  # compatible with all versions of RPI as of Jan. 2019
-  # v1 - v3B+
+
   lcd_rs = digitalio.DigitalInOut(board.D22)
   lcd_en = digitalio.DigitalInOut(board.D17)
   lcd_d4 = digitalio.DigitalInOut(board.D25)
@@ -37,6 +35,7 @@ class Lcd_class():
   
   def lcd_string(self, message):
     # Send string to display
+    lcd.clear()
     message = message.ljust(16," ")
     lcd.message = message
 
@@ -52,12 +51,13 @@ class Usbshredder():
     def button(self, block):
         global pressed
         pressed = False
+        time.sleep(2)
         GPIO.setwarnings(False) # Ignore warning for now
-        GPIO.setmode(GPIO.BOARD) # Use physical pin numbering
-        GPIO.setup(16, GPIO.IN, pull_up_down=GPIO.PUD_DOWN) # Set pin 10 to be an input pin and set initial value to be pulled low (off)
+        #GPIO.setmode(GPIO.BOARD) # Use physical pin numbering
+        GPIO.setup(21, GPIO.IN, pull_up_down=GPIO.PUD_DOWN) # Set pin 10 to be an input pin and set initial value to be pulled low (off)
         while True: # Run forever
           time.sleep(0.2)
-          if GPIO.input(36) == GPIO.HIGH:
+          if GPIO.input(21) == GPIO.HIGH:
             try:
               if p.poll() is None: # Check if the p subprocess is running.
                 pressed = True     # Button watchdog
@@ -103,14 +103,13 @@ class Usbshredder():
       
     def show_lcd(self, lcdstr, status = " "):
       asdf = Lcd_class()  ## DESCOMENTAR PARA USAR CON LCD
-      #asdf.lcd_init()
 
       if lcdstr == "clear":
           system('clear')
           asdf.lcd_clear()  ## DESCOMENTAR PARA USAR CON LCD
       else: 
-          print(lcdstr)
-          print(status)
+          #print(lcdstr)
+          #print(status)
           asdf.lcd_string(lcdstr)  ## DESCOMENTAR PARA USAR CON LCD
 
     def _work(self):
@@ -118,7 +117,7 @@ class Usbshredder():
         self.context = pyudev.Context()
         self.monitor = pyudev.Monitor.from_netlink(self.context)
         self.monitor.filter_by(subsystem='block')
-        self.show_lcd("Ready for duty\n" + "Insert USB")
+        self.show_lcd("Ready for duty\nInsert USB")
         self.monitor.start()
         for device in iter(self.monitor.poll, None):
             
